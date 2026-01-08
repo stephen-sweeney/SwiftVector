@@ -1,0 +1,51 @@
+//
+//  ContentView.swift
+//  NarrativeDemo
+//
+//  Created by Stephen Sweeney on 1/2/26.
+//
+
+import SwiftUI
+
+struct ContentView: View {
+    @StateObject private var vm = ViewModel()
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Text("SwiftVector Narrative Demo")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                
+                Text(vm.state.currentScene)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.gray.opacity(0.15))
+                    .cornerRadius(8)
+                
+                Button(vm.state.isGameOver ? "Game Over" : "What happens next?") {
+                    vm.nextEvent()
+                }
+                .buttonStyle(.borderedProminent)
+                .font(.title3)
+                .disabled(vm.state.isGameOver)
+                
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(vm.state.eventLog, id: \.self) { event in
+                            Text(event)
+                                .font(.subheadline)
+                                .padding(.horizontal)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .navigationTitle("Adventure")
+        }
+    }
+}
+
+#Preview {
+    ContentView()
+}
