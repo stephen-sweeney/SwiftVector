@@ -1,204 +1,198 @@
-# NarrativeDemo
+# SwiftVector
 
-A minimal iOS application demonstrating the **SwiftVector** pattern for deterministic AI agent control.
+Deterministic control of probabilistic agents — an architecture for building **reproducible, auditable, safety-minded** AI systems.
 
-## What This Is
+**Core principle:** *State, not prompts, must be the authority.*
 
-NarrativeDemo is a simple text-based adventure game where an AI agent proposes story events and a deterministic reducer validates them. It serves as a reference implementation for the SwiftVector architectural pattern described in the accompanying whitepaper.
-
-**The core insight:** AI can hallucinate, but your system doesn't have to accept it. State, not prompts, is the authority.
-
-## The Pattern
-
-SwiftVector separates AI systems into components with distinct responsibilities:
-
-| Component | Role | Determinism | File |
-|-----------|------|-------------|------|
-| **State** | Immutable snapshot of world truth | Deterministic | `AdventureState.swift` |
-| **Action** | Serializable description of proposed change | Deterministic | `StoryAction.swift` |
-| **Agent** | Proposes actions based on current state | Stochastic | `StoryAgent.swift` |
-| **Reducer** | Validates and applies actions | Deterministic | `StoryReducer.swift` |
-| **Orchestrator** | Coordinates the control loop | Deterministic | `AdventureOrchestrator.swift` |
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    SwiftVector Control Loop                  │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│   State ──────► Agent ──────► Action ──────► Reducer ────┐  │
-│     ▲           (LLM)        (proposal)    (validates)   │  │
-│     │                                                     │  │
-│     └─────────────────── New State ◄─────────────────────┘  │
-│                                                              │
-│   The Agent can propose anything.                           │
-│   The Reducer decides what actually happens.                │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Why This Matters
-
-Traditional AI agent architectures give the model too much authority. When an LLM hallucinates:
-- Invalid actions corrupt state
-- Debugging is non-deterministic
-- Compliance is impossible
-
-SwiftVector inverts the control:
-- The LLM proposes; the system disposes
-- Invalid proposals are rejected with full audit trail
-- Same actions always produce same state (deterministic replay)
-
-## Running the Demo
-
-### Requirements
-- Xcode 16+ (Xcode 26 for FoundationModels/Apple Intelligence)
-- iOS 18+ deployment target (iOS 26 for on-device LLM)
-- Swift 6 language mode
-
-### Build and Run
-1. Open `NarrativeDemo.xcodeproj` in Xcode
-2. Select a simulator or device
-3. Build and run (`Cmd+R`)
-4. Tap "What happens next?" to advance the story
-
-### Running Tests
-1. Ensure you have a test target (`NarrativeDemoTests`)
-2. Press `Cmd+U` to run all tests
-
-## Key Features Demonstrated
-
-### 1. Stochastic Agent with Deterministic Control
-The `StoryAgent` uses Apple's on-device LLM (when available) to propose narrative events. The `StoryReducer` validates every proposal against world rules.
-
-```swift
-// Agent can propose anything—even hallucinated values
-.findGold(amount: 5000)  // LLM might suggest this
-
-// Reducer enforces rules
-guard amount <= 100 else {
-    return (state, false, "Rejected: Amount exceeds world rules.")
-}
-```
-
-### 2. Visible Rejection
-Watch the event log. You'll see both accepted (✅) and rejected (❌) actions:
-
-```
-🤖 Agent proposed: find 500 gold
-❌ REJECTED: Amount 500 exceeds world rules (max 100).
-```
-
-This makes the "stochastic gap" visible—the space between what AI proposes and what the system allows.
-
-### 3. Audit Trail for Compliance
-Every action is logged with:
-- Timestamp
-- Agent ID
-- State hash before and after
-- Whether applied or rejected
-- Human-readable description
-
-```swift
-let log = await orchestrator.getAuditLog()
-for entry in log {
-    print("[\(entry.timestamp)] Applied: \(entry.applied)")
-    print("  Hash: \(entry.stateHashAfter)")
-}
-```
-
-### 4. Deterministic Replay
-Because all state transitions go through serialized actions, you can replay any session exactly:
-
-```swift
-// Original session produced this log
-let originalLog = await orchestrator.getAuditLog()
-
-// Replay on fresh orchestrator
-let replay = AdventureOrchestrator()
-for entry in originalLog {
-    if case .actionProposed(let action, _) = entry.eventType {
-        await replay.replayAction(action)
-    }
-}
-
-// Hashes will match exactly
-```
-
-### 5. Graceful Degradation
-On devices without Apple Intelligence, the agent falls back to heuristic-based proposals. The architecture remains identical—only the proposal source changes.
-
-## Whitepaper Alignment
-
-This demo implements concepts from the SwiftVector whitepaper:
-
-| Section | Concept | Implementation |
-|---------|---------|----------------|
-| §2.1 | State as immutable snapshot | `AdventureState` is a `Sendable` struct |
-| §2.2 | Actions as serializable intents | `StoryAction` enum with associated values |
-| §2.3 | Agent as stochastic proposer | `StoryAgent` uses LLM or random fallback |
-| §3.1 | Reducer as pure function | `StoryReducer.reduce()` is deterministic |
-| §4.1 | Orchestrator control loop | `AdventureOrchestrator.advanceStory()` |
-| §4.4 | Audit trail for replay | `AuditEntry` with state hashing |
-| §4.5 | Regulatory compliance | SHA256 hashes enable verification |
-
-## Validation Rules
-
-The reducer enforces these world rules:
-
-| Rule | Validation | Whitepaper Principle |
-|------|------------|---------------------|
-| Gold limit | `amount <= 100` | Constrain authority, not intelligence |
-| No duplicates | `!inventory.contains(item)` | State consistency |
-| Safe rest | Location not in danger zones | Domain-specific rules |
-| Game over | No actions after death | State-based guards |
-
-## Project Structure
-
-```
-NarrativeDemo/
-├── App/
-│   └── NarrativeDemoApp.swift
-├── Core/
-│   ├── AdventureState.swift      # State + computed properties
-│   ├── StoryAction.swift         # Action enum
-│   ├── StoryAgent.swift          # LLM-powered proposer
-│   ├── StoryReducer.swift        # Deterministic validator
-│   ├── AdventureOrchestrator.swift  # Control loop coordinator
-│   └── AuditEntry.swift          # Audit trail structure
-├── View/
-│   ├── ContentView.swift         # SwiftUI interface
-│   └── ViewModel.swift           # UI state management
-├── docs/
-│   └── AUDIT_ARCHITECTURE.md     # Detailed architecture diagrams
-└── README.md
-```
-
-## Swift 6 Concurrency
-
-This project uses Swift 6 strict concurrency. Key patterns:
-
-- `actor` for `StoryAgent` and `AdventureOrchestrator` (isolation)
-- `Sendable` conformance on `AdventureState`, `StoryAction`, `AuditEntry`
-- `nonisolated` on computed properties and pure functions
-- `AsyncStream` for reactive state broadcasting
-
-See `LEARNING.md` for notes on Swift 6 actor isolation inference.
-
-## Further Reading
-
-- [SwiftVector Whitepaper](https://agentincommand.ai/whitepaper) — Full architectural specification
-- [Agent in Command](https://agentincommand.ai) — Deterministic AI architecture for safety-critical systems
-- [Apple FoundationModels](https://developer.apple.com/documentation/FoundationModels) — On-device LLM framework
-
-## Related Projects
-
-- **Chronicle Quest** — Full narrative RPG using SwiftVector (private, coming soon)
-- **Flightworks GCS** — Drone ground control system with safety-critical AI (public, coming soon)
-
-## License
-
-MIT
+> SwiftVector is a control loop: agents propose, a deterministic reducer decides, state is the source of truth, audits enable replay.
 
 ---
 
-*Built by [Stephen Sweeney](https://agentincommand.ai) as a reference implementation of the SwiftVector pattern.*
+## If You're Evaluating This Repository
+
+**5 minutes to understand the pattern:**
+
+1. **Read the core loop** (below) — this is the entire idea
+2. **Skim the Whitepaper** — formal specification and rationale  
+   → [`whitepaper/SwiftVector-Whitepaper.md`](./whitepaper/SwiftVector-Whitepaper.md)
+3. **Run the demo** — see the pattern in action  
+   → [`examples/NarrativeDemo`](./examples/NarrativeDemo) *(Xcode project)*
+
+The point isn't clever prompts. The point is **governance + reproducibility**: you can explain what happened, reproduce it, and prove what was allowed or denied.
+
+---
+
+## The Problem SwiftVector Solves
+
+Most multi-agent systems fail the same way:
+
+- Prompts become the source of truth
+- Memory becomes an append-only text log
+- Agents mutate state implicitly
+- Failures cannot be replayed or explained
+
+This creates what SwiftVector calls the **Stochastic Gap** — the divergence between user intent and model output. Frameworks like LangChain attempt to manage this gap through increasingly complex prompt engineering. That approach scales poorly.
+
+SwiftVector takes a different position: **constrain authority, not intelligence.**
+
+Agents remain free to reason, explore, and generate ideas. They are never allowed to redefine truth. Truth lives in state, not in language.
+
+---
+
+## Architecture
+
+```
+┌─────────────────┐
+│  Agent (LLM/AI) │
+└────────┬────────┘
+         │ propose
+         ▼
+┌─────────────────┐
+│ Reducer / Policy│  ◄── deterministic gatekeeper
+│   (pure func)   │
+└────────┬────────┘
+         │ accept / reject
+         ▼
+┌─────────────────┐      ┌─────────────────┐
+│   State Store   │─────►│   Audit Log     │
+│ (source of truth)│      │  (replayable)   │
+└─────────────────┘      └─────────────────┘
+```
+
+**The Deterministic Control Loop:**
+
+```
+State → Agent → Action → Reducer → New State
+```
+
+- **State** is the single source of truth
+- **Agents** reason about state and propose Actions
+- **Reducers** validate and apply state transitions (deterministic, pure functions)
+- **Effects** perform I/O after transitions, never during
+
+The reducer is the gatekeeper. You can change models, prompts, and agent strategies without changing the rules of state.
+
+---
+
+## What's in This Repository
+
+### Core Documentation
+
+| Document | Description |
+|----------|-------------|
+| [**SwiftVector Whitepaper**](./whitepaper/SwiftVector-Whitepaper.md) | Formal specification, design rationale, and implementation guidance |
+
+### Manifestos (Vision Documents)
+
+| Document | Description |
+|----------|-------------|
+| [**Swift at the Edge**](./manifestos/Swift-at-the-Edge.md) | Why Swift is the natural foundation for edge-deployed AI systems |
+| [**The Agency Paradox**](./manifestos/Agency-Paradox.md) | Human command and governance in AI-driven development |
+
+### Reference Implementation
+
+| Project | Description |
+|---------|-------------|
+| [**NarrativeDemo**](./examples/NarrativeDemo) | Xcode project demonstrating the full pattern: agent proposals, reducer validation, state transitions, and audit replay |
+
+> **Why a narrative demo?** Long-running narrative systems expose every failure mode of agent architectures — state drift, hallucinated facts, non-replayable failures. If the pattern works here, it works anywhere.
+
+---
+
+## Related Projects
+
+### Flightworks GCS (Open Source, In Development)
+
+Ground Control Station applying SwiftVector to operator-in-the-loop drone workflows: decision support, safety gates, and replayable audits.
+
+- Repository: *(coming Q2 2026)*
+
+### Chronicle Quest (Commercial, Private)
+
+A narrative system built on SwiftVector. Public materials focus on architecture patterns and non-proprietary examples, not the proprietary implementation.
+
+---
+
+## Design Constraints
+
+SwiftVector is designed to be:
+
+- **Deterministic at decision points** — reducers and policies are pure functions
+- **Model-agnostic** — works with any LLM, local or cloud
+- **Auditable by construction** — every state change is logged and replayable
+- **Edge-ready** — optimized for on-device deployment with Swift
+
+SwiftVector is **not**:
+
+- A promise of "perfect AI"
+- A flight-certified autopilot
+- A replacement for formal safety certification processes
+
+The pattern enables certification. It does not replace it.
+
+---
+
+## Why Swift?
+
+SwiftVector's architectural principles apply to any language. The *guarantees* depend on the implementation.
+
+| Context | Any Language | Swift Required |
+|---------|--------------|----------------|
+| Research & prototyping | ✓ | |
+| Production cloud systems | ✓ | |
+| **Edge deployment** | | ✓ Performance matters |
+| **Safety-critical systems** | | ✓ Certification required |
+| **Regulated industries** | | ✓ Compile-time proof required |
+
+Swift provides:
+
+- **Compile-time type safety** — no runtime type errors
+- **Actor isolation** — compiler-enforced concurrency safety
+- **Deterministic memory** — no GC pauses, stable iteration order
+- **Reproducible execution** — same binary, same inputs → identical outputs
+
+For systems where correctness is a *preference*, use whatever language your team knows. For systems where correctness is a *requirement*, Swift's compile-time guarantees are the foundation that makes certification achievable.
+
+---
+
+## Roadmap
+
+**Current Focus**
+- Public reference implementation (NarrativeDemo)
+- Documentation and examples
+
+**Near Term**
+- Stable replay format with schema versioning
+- Additional policy module examples (geofencing, risk scoring)
+- CI pipeline and test coverage
+
+**Future**
+- Replay viewer / inspector tooling
+- Distributed SwiftVector patterns
+- Community contributions welcome once examples stabilize
+
+---
+
+## Contributing
+
+Questions, suggestions, or discussion about applications? Open an issue.
+
+Pull requests welcome for documentation improvements or bug fixes.
+
+---
+
+## License
+
+- **Code:** MIT
+- **Documentation:** CC BY 4.0
+
+---
+
+## Author
+
+**Stephen Sweeney**
+
+- Website: [agentincommand.ai](https://agentincommand.ai)
+- GitHub: [github.com/stephen-sweeney](https://github.com/stephen-sweeney)
+- LinkedIn: [linkedin.com/in/macsweeney](https://linkedin.com/in/macsweeney)
+- Email: stephen@agentincommand.ai
