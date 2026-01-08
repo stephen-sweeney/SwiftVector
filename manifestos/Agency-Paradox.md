@@ -1,7 +1,7 @@
 # The Agency Paradox: Who is the Agent in Command?
 
 **Version:** 1.0  
-**Date:** December 2024  
+**Date:** December 2025  
 **Author:** Stephen Sweeney  
 **Type:** Manifesto  
 **Audience:** Engineering Leaders, AI Teams, Safety-Critical Developers
