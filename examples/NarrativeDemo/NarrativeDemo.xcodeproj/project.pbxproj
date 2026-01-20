@@ -16,6 +16,12 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXBuildFile section */
+		4AFB7F6B2F1234560099AA01 /* SwiftVectorCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4AFB7F6E2F1234560099AA01 /* SwiftVectorCore */; };
+		4AFB7F6C2F1234560099AA01 /* SwiftVectorCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4AFB7F6E2F1234560099AA01 /* SwiftVectorCore */; };
+		4AFB7F6D2F1234560099AA01 /* SwiftVectorTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 4AFB7F6F2F1234560099AA01 /* SwiftVectorTesting */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		4A81BBA52F0E18B00094D762 /* NarrativeDemoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NarrativeDemoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4A971DCE2F08CFE6004213DD /* NarrativeDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NarrativeDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -39,6 +45,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4AFB7F6C2F1234560099AA01 /* SwiftVectorCore in Frameworks */,
+				4AFB7F6D2F1234560099AA01 /* SwiftVectorTesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -46,6 +54,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4AFB7F6B2F1234560099AA01 /* SwiftVectorCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +100,8 @@
 			);
 			name = NarrativeDemoTests;
 			packageProductDependencies = (
+				4AFB7F6E2F1234560099AA01 /* SwiftVectorCore */,
+				4AFB7F6F2F1234560099AA01 /* SwiftVectorTesting */,
 			);
 			productName = NarrativeDemoTests;
 			productReference = 4A81BBA52F0E18B00094D762 /* NarrativeDemoTests.xctest */;
@@ -113,6 +124,7 @@
 			);
 			name = NarrativeDemo;
 			packageProductDependencies = (
+				4AFB7F6E2F1234560099AA01 /* SwiftVectorCore */,
 			);
 			productName = NarrativeDemo;
 			productReference = 4A971DCE2F08CFE6004213DD /* NarrativeDemo.app */;
@@ -146,6 +158,9 @@
 			);
 			mainGroup = 4A971DC52F08CFE6004213DD;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				4AFB7F6A2F1234560099AA01 /* SwiftVector */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4A971DCF2F08CFE6004213DD /* Products */;
 			projectDirPath = "";
@@ -198,6 +213,26 @@
 			targetProxy = 4A81BBA92F0E18B00094D762 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		4AFB7F6A2F1234560099AA01 /* SwiftVector */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4AFB7F6E2F1234560099AA01 /* SwiftVectorCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4AFB7F6A2F1234560099AA01 /* SwiftVector */;
+			productName = SwiftVectorCore;
+		};
+		4AFB7F6F2F1234560099AA01 /* SwiftVectorTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4AFB7F6A2F1234560099AA01 /* SwiftVector */;
+			productName = SwiftVectorTesting;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		4A81BBAC2F0E18B00094D762 /* Debug */ = {

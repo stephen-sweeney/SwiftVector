@@ -10,6 +10,7 @@ import Combine
 @MainActor
 final class ViewModel: ObservableObject {
     @Published var state = AdventureState()
+    @Published var narrativeLog: [String] = ["🌲 You awaken in an ancient forest, birds singing overhead."]
     
     private let orchestrator = AdventureOrchestrator()
     private var task: Task<Void, Never>?
@@ -18,8 +19,10 @@ final class ViewModel: ObservableObject {
         task = Task { [weak self] in
             guard let self else { return }
             for await newState in await orchestrator.stateStream() {
+                let narrative = await orchestrator.getNarrativeLog()
                 await MainActor.run {
                     self.state = newState
+                    self.narrativeLog = narrative
                 }
             }
         }

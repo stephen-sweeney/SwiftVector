@@ -6,14 +6,14 @@
 //
 
 import Foundation
+import SwiftVectorCore
 
 // MARK: - State
-struct AdventureState: Equatable, Sendable {
+struct AdventureState: State {
     var location: String = "ancient forest"
     var health: Int = 100
     var gold: Int = 0
     var inventory: [String] = []
-    var eventLog: [String] = ["You awaken in an ancient forest, birds singing overhead."]
     
     // LEARNING-DEBT(workaround): Swift 6 actor isolation inference on computed properties
     // See LEARNING.md for details.

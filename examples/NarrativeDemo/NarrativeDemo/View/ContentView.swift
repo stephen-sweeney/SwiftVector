@@ -32,7 +32,7 @@ struct ContentView: View {
                 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(vm.state.eventLog, id: \.self) { event in
+                        ForEach(vm.narrativeLog, id: \.self) { event in
                             Text(event)
                                 .font(.subheadline)
                                 .padding(.horizontal)

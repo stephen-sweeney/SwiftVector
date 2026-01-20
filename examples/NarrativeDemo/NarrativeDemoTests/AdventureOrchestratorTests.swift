@@ -5,8 +5,10 @@
 //  Created by Stephen Sweeney on 1/6/26.
 //
 
-import Testing
 import Foundation
+import SwiftVectorCore
+import SwiftVectorTesting
+import Testing
 @testable import NarrativeDemo
 
 // MARK: - Audit Trail Tests
@@ -14,9 +16,20 @@ import Foundation
 @Suite("Adventure Orchestrator Audit Trail")
 struct AdventureOrchestratorTests {
     
+    private func makeOrchestrator(
+        clock: MockClock = MockClock(fixed: Date(timeIntervalSince1970: 0)),
+        uuidGenerator: MockUUIDGenerator = MockUUIDGenerator(sequential: 1)
+    ) -> AdventureOrchestrator {
+        AdventureOrchestrator(
+            initialState: AdventureState(),
+            clock: clock,
+            uuidGenerator: uuidGenerator
+        )
+    }
+    
     @Test("Audit log captures initial state")
     func auditLogCapturesInitialState() async throws {
-        let orchestrator = AdventureOrchestrator()
+        let orchestrator = makeOrchestrator()
         
         let log = await orchestrator.getAuditLog()
         
@@ -29,7 +42,8 @@ struct AdventureOrchestratorTests {
     @Test("Audit log records proposed action")
     @MainActor
     func auditLogRecordsProposedAction() async throws {
-        let orchestrator = AdventureOrchestrator()
+        let clock = MockClock(fixed: Date(timeIntervalSince1970: 0))
+        let orchestrator = makeOrchestrator(clock: clock)
         
         await orchestrator.advanceStory()
         
@@ -44,14 +58,14 @@ struct AdventureOrchestratorTests {
             Issue.record("Second entry should be an action proposal")
         }
         
-        #expect(actionEntry.timestamp <= Date(), "Timestamp should be in the past")
-        #expect(!actionEntry.resultDescription.isEmpty, "Should have result description")
+        #expect(actionEntry.timestamp == clock.now(), "Timestamp should be deterministic")
+        #expect(!actionEntry.rationale.isEmpty, "Should have result description")
     }
     
     @Test("Audit log distinguishes accepted vs rejected actions")
     @MainActor
     func auditLogDistinguishesAcceptedVsRejected() async throws {
-        let orchestrator = AdventureOrchestrator()
+        let orchestrator = makeOrchestrator()
         
         // Use replayAction with known actions to control outcomes
         // Gold amount 500 exceeds limit (100) and will be rejected
@@ -71,12 +85,12 @@ struct AdventureOrchestratorTests {
         #expect(replayEntries.count == 2, "Should have two replay entries")
         #expect(replayEntries[0].applied == true, "First action (50 gold) should be accepted")
         #expect(replayEntries[1].applied == false, "Second action (500 gold) should be rejected")
-        #expect(replayEntries[1].resultDescription.contains("Rejected"), "Rejection should be described")
+        #expect(!replayEntries[1].rationale.isEmpty, "Rejection should be described")
     }
     
     @Test("Audit log captures state hash for replay")
     func auditLogCapturesStateHash() async throws {
-        let orchestrator = AdventureOrchestrator()
+        let orchestrator = makeOrchestrator()
         
         await orchestrator.advanceStory()
         
@@ -91,7 +105,7 @@ struct AdventureOrchestratorTests {
     
     @Test("State hash changes when state changes")
     func stateHashChangesWithState() async throws {
-        let orchestrator = AdventureOrchestrator()
+        let orchestrator = makeOrchestrator()
         
         // Use a known action that will be accepted and change state
         await orchestrator.replayAction(.findGold(amount: 50))
@@ -104,9 +118,12 @@ struct AdventureOrchestratorTests {
                 "Hash should change when state changes")
     }
     
-    @Test("State hash changes even when action rejected due to event log")
-    func stateHashChangesEvenWhenRejected() async throws {
-        let orchestrator = AdventureOrchestrator()
+    @Test("State hash unchanged when action rejected")
+    func stateHashUnchangedWhenRejected() async throws {
+        let orchestrator = makeOrchestrator()
+        
+        let stateBefore = await orchestrator.getCurrentState()
+        let hashBefore = stateBefore.stateHash()
         
         await orchestrator.replayAction(.findGold(amount: 500))
         
@@ -114,13 +131,17 @@ struct AdventureOrchestratorTests {
         let entry = log.last!
         
         #expect(entry.applied == false, "Action should be rejected")
-        #expect(entry.stateHashBefore != entry.stateHashAfter,
-                "Hash changes because eventLog records the rejection")
+        #expect(entry.stateHashBefore == entry.stateHashAfter,
+                "Hash should be unchanged for rejected action")
+        
+        let stateAfter = await orchestrator.getCurrentState()
+        #expect(hashBefore == stateAfter.stateHash(),
+                "State hash should be identical after rejection")
     }
     
     @Test("Audit log enables deterministic replay")
     func auditLogEnablesDeterministicReplay() async throws {
-        let orchestrator = AdventureOrchestrator()
+        let orchestrator = makeOrchestrator()
         
         // Use known actions for deterministic test
         let actions: [StoryAction] = [
@@ -144,7 +165,7 @@ struct AdventureOrchestratorTests {
         let originalState = await orchestrator.getCurrentState()
         
         // Create new orchestrator and replay the same actions
-        let replayOrchestrator = AdventureOrchestrator()
+        let replayOrchestrator = makeOrchestrator()
         
         for action in actions {
             await replayOrchestrator.replayAction(action)
@@ -167,7 +188,7 @@ struct AdventureOrchestratorTests {
     
     @Test("Audit entries are immutable and Sendable")
     func auditEntriesAreImmutableAndSendable() async throws {
-        let orchestrator = AdventureOrchestrator()
+        let orchestrator = makeOrchestrator()
         
         await orchestrator.advanceStory()
         
@@ -176,19 +197,19 @@ struct AdventureOrchestratorTests {
         
         // Verify Sendable by passing across actor boundary
         let capturedEntry = await Task.detached {
-            // This compiles only if AuditEntry is Sendable
+            // This compiles only if AuditEvent is Sendable
             return entry
         }.value
         
         #expect(capturedEntry.id == entry.id, "Entry should be safely passable across actors")
     }
     
-    @Test("Hash includes full event log content")
-    func hashIncludesFullEventLogContent() async throws {
-        let orchestrator1 = AdventureOrchestrator()
-        let orchestrator2 = AdventureOrchestrator()
+    @Test("Identical actions produce identical state hashes")
+    func identicalActionsProduceIdenticalHashes() async throws {
+        let orchestrator1 = makeOrchestrator()
+        let orchestrator2 = makeOrchestrator()
         
-        // Same gold action on both
+        // Same actions on both
         await orchestrator1.replayAction(.findGold(amount: 20))
         await orchestrator2.replayAction(.findGold(amount: 20))
         
@@ -196,18 +217,17 @@ struct AdventureOrchestratorTests {
         let state2 = await orchestrator2.getCurrentState()
         
         // States should be equal and hashes should match
-        #expect(state1.hash() == state2.hash(), 
+        #expect(state1.stateHash() == state2.stateHash(), 
                 "Identical states should produce identical hashes")
         
-        // Now add different actions to diverge event logs
+        // Different actions diverge state
         await orchestrator1.replayAction(.moveTo(location: "dark cave"))
         await orchestrator2.replayAction(.moveTo(location: "sunlit meadow"))
         
         let divergedState1 = await orchestrator1.getCurrentState()
         let divergedState2 = await orchestrator2.getCurrentState()
         
-        // Event logs are different, so hashes should differ
-        #expect(divergedState1.hash() != divergedState2.hash(), 
-                "Different event logs should produce different hashes")
+        #expect(divergedState1.stateHash() != divergedState2.stateHash(), 
+                "Different locations should produce different hashes")
     }
 }
