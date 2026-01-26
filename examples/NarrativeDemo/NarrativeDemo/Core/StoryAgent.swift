@@ -5,6 +5,7 @@
 //  Created by Stephen Sweeney on 1/3/26.
 //
 import Foundation
+import SwiftVectorCore
 #if canImport(FoundationModels)
     import FoundationModels
 #endif
@@ -17,7 +18,7 @@ import Foundation
 /// Key insight: The Agent can propose anything—valid or invalid.
 /// The Reducer is responsible for validation.
 
-actor StoryAgent {
+actor StoryAgent: Agent {
     
     enum StoryAgentError: Error {
         case invalidLLMOutput
