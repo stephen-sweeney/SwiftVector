@@ -118,7 +118,7 @@ public struct EventLogVerificationResult: Sendable, Equatable {
 /// The log provides `actions()` to extract just the actions for replay:
 /// ```swift
 /// for (action, agentID) in log.actions() {
-///     await orchestrator.replay(action, from: agentID)
+///     await orchestrator.replay(action, agentID: agentID)
 /// }
 /// ```
 ///

@@ -31,7 +31,7 @@ struct AdventureOrchestratorTests {
     func auditLogCapturesInitialState() async throws {
         let orchestrator = makeOrchestrator()
         
-        let log = await orchestrator.getAuditLog()
+        let log = await orchestrator.auditLog()
         
         #expect(log.count == 1, "Should have initial state entry")
         #expect(log[0].eventType == .initialization, "First entry should be initialization")
@@ -45,9 +45,9 @@ struct AdventureOrchestratorTests {
         let clock = MockClock(fixed: Date(timeIntervalSince1970: 0))
         let orchestrator = makeOrchestrator(clock: clock)
         
-        await orchestrator.advanceStory()
+        await orchestrator.advance()
         
-        let log = await orchestrator.getAuditLog()
+        let log = await orchestrator.auditLog()
         
         #expect(log.count == 2, "Should have initialization and one action entry")
         
@@ -67,12 +67,12 @@ struct AdventureOrchestratorTests {
     func auditLogDistinguishesAcceptedVsRejected() async throws {
         let orchestrator = makeOrchestrator()
         
-        // Use replayAction with known actions to control outcomes
+        // Use replay with known actions to control outcomes
         // Gold amount 500 exceeds limit (100) and will be rejected
-        await orchestrator.replayAction(.findGold(amount: 50))   // Should be accepted
-        await orchestrator.replayAction(.findGold(amount: 500))  // Should be rejected
+        await orchestrator.replay(.findGold(amount: 50))   // Should be accepted
+        await orchestrator.replay(.findGold(amount: 500))  // Should be rejected
         
-        let log = await orchestrator.getAuditLog()
+        let log = await orchestrator.auditLog()
         
         // Filter to just the replay actions
         let replayEntries = log.filter { 
@@ -92,9 +92,9 @@ struct AdventureOrchestratorTests {
     func auditLogCapturesStateHash() async throws {
         let orchestrator = makeOrchestrator()
         
-        await orchestrator.advanceStory()
+        await orchestrator.advance()
         
-        let log = await orchestrator.getAuditLog()
+        let log = await orchestrator.auditLog()
         let entry = log.last!
         
         #expect(!entry.stateHashBefore.isEmpty, "Should have before hash")
@@ -108,9 +108,9 @@ struct AdventureOrchestratorTests {
         let orchestrator = makeOrchestrator()
         
         // Use a known action that will be accepted and change state
-        await orchestrator.replayAction(.findGold(amount: 50))
+        await orchestrator.replay(.findGold(amount: 50))
         
-        let log = await orchestrator.getAuditLog()
+        let log = await orchestrator.auditLog()
         let entry = log.last!
         
         #expect(entry.applied == true, "Action should be accepted")
@@ -122,19 +122,19 @@ struct AdventureOrchestratorTests {
     func stateHashUnchangedWhenRejected() async throws {
         let orchestrator = makeOrchestrator()
         
-        let stateBefore = await orchestrator.getCurrentState()
+        let stateBefore = await orchestrator.currentState
         let hashBefore = stateBefore.stateHash()
         
-        await orchestrator.replayAction(.findGold(amount: 500))
+        await orchestrator.replay(.findGold(amount: 500))
         
-        let log = await orchestrator.getAuditLog()
+        let log = await orchestrator.auditLog()
         let entry = log.last!
         
         #expect(entry.applied == false, "Action should be rejected")
         #expect(entry.stateHashBefore == entry.stateHashAfter,
                 "Hash should be unchanged for rejected action")
         
-        let stateAfter = await orchestrator.getCurrentState()
+        let stateAfter = await orchestrator.currentState
         #expect(hashBefore == stateAfter.stateHash(),
                 "State hash should be identical after rejection")
     }
@@ -157,23 +157,23 @@ struct AdventureOrchestratorTests {
         
         // Execute original sequence
         for action in actions {
-            await orchestrator.replayAction(action)
+            await orchestrator.replay(action)
         }
         
-        let originalLog = await orchestrator.getAuditLog()
+        let originalLog = await orchestrator.auditLog()
         let originalFinalHash = await originalLog.last!.stateHashAfter
-        let originalState = await orchestrator.getCurrentState()
+        let originalState = await orchestrator.currentState
         
         // Create new orchestrator and replay the same actions
         let replayOrchestrator = makeOrchestrator()
         
         for action in actions {
-            await replayOrchestrator.replayAction(action)
+            await replayOrchestrator.replay(action)
         }
         
-        let replayLog = await replayOrchestrator.getAuditLog()
+        let replayLog = await replayOrchestrator.auditLog()
         let replayFinalHash = await replayLog.last!.stateHashAfter
-        let replayState = await replayOrchestrator.getCurrentState()
+        let replayState = await replayOrchestrator.currentState
         
         // Verify byte-identical replay
         #expect(originalFinalHash == replayFinalHash, 
@@ -190,9 +190,9 @@ struct AdventureOrchestratorTests {
     func auditEntriesAreImmutableAndSendable() async throws {
         let orchestrator = makeOrchestrator()
         
-        await orchestrator.advanceStory()
+        await orchestrator.advance()
         
-        let log = await orchestrator.getAuditLog()
+        let log = await orchestrator.auditLog()
         let entry = log.first!
         
         // Verify Sendable by passing across actor boundary
@@ -210,22 +210,22 @@ struct AdventureOrchestratorTests {
         let orchestrator2 = makeOrchestrator()
         
         // Same actions on both
-        await orchestrator1.replayAction(.findGold(amount: 20))
-        await orchestrator2.replayAction(.findGold(amount: 20))
+        await orchestrator1.replay(.findGold(amount: 20))
+        await orchestrator2.replay(.findGold(amount: 20))
         
-        let state1 = await orchestrator1.getCurrentState()
-        let state2 = await orchestrator2.getCurrentState()
+        let state1 = await orchestrator1.currentState
+        let state2 = await orchestrator2.currentState
         
         // States should be equal and hashes should match
         #expect(state1.stateHash() == state2.stateHash(), 
                 "Identical states should produce identical hashes")
         
         // Different actions diverge state
-        await orchestrator1.replayAction(.moveTo(location: "dark cave"))
-        await orchestrator2.replayAction(.moveTo(location: "sunlit meadow"))
+        await orchestrator1.replay(.moveTo(location: "dark cave"))
+        await orchestrator2.replay(.moveTo(location: "sunlit meadow"))
         
-        let divergedState1 = await orchestrator1.getCurrentState()
-        let divergedState2 = await orchestrator2.getCurrentState()
+        let divergedState1 = await orchestrator1.currentState
+        let divergedState2 = await orchestrator2.currentState
         
         #expect(divergedState1.stateHash() != divergedState2.stateHash(), 
                 "Different locations should produce different hashes")

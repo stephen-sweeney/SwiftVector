@@ -30,7 +30,7 @@ final class ViewModel: ObservableObject {
     
     func nextEvent() {
         Task {
-            await orchestrator.advanceStory()
+            await orchestrator.advance()
         }
     }
     

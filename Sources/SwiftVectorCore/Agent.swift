@@ -23,20 +23,6 @@ import Foundation
 ///     }
 /// }
 /// ```
-/**
- public protocol Agent<S, A>: Sendable {
-     associatedtype S: State
-     associatedtype A: Action
-
-     /// Proposes an action based on the observed state.
-     ///
-     /// - Parameter state: Current state snapshot (immutable)
-     /// - Returns: A proposed action for the Reducer to validate
-     func propose(about state: S) async -> A
- }
-
- */
-
 public protocol Agent: Sendable {
     associatedtype State: SwiftVectorCore.State
     associatedtype Action: SwiftVectorCore.Action
