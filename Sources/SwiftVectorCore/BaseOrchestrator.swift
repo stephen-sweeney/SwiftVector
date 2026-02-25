@@ -25,6 +25,7 @@ public actor BaseOrchestrator<S: State, A: Action, R: Reducer> where R.S == S, R
     private let reducer: R
     private let clock: any Clock
     private let uuid: any UUIDGenerator
+    private let governancePolicy: GovernancePolicy<S, A>?
 
     nonisolated private let stream: AsyncStream<S>
     private let continuation: AsyncStream<S>.Continuation
@@ -35,13 +36,15 @@ public actor BaseOrchestrator<S: State, A: Action, R: Reducer> where R.S == S, R
         initialState: S,
         reducer: R,
         clock: any Clock,
-        uuidGenerator: any UUIDGenerator
+        uuidGenerator: any UUIDGenerator,
+        governancePolicy: GovernancePolicy<S, A>? = nil
     ) {
         (stream, continuation) = AsyncStream.makeStream()
         self.currentState = initialState
         self.reducer = reducer
         self.clock = clock
         self.uuid = uuidGenerator
+        self.governancePolicy = governancePolicy
         self.log = EventLog()
 
         log.append(.initialization(
@@ -74,8 +77,70 @@ public actor BaseOrchestrator<S: State, A: Action, R: Reducer> where R.S == S, R
     @discardableResult
     func apply(action: A, agentID: String) async -> ReducerResult<S> {
         let hashBefore = currentState.stateHash()
-        let result = reducer.reduce(state: currentState, action: action)
 
+        // Governance evaluation (if policy is active)
+        if let policy = governancePolicy {
+            let trace = policy.evaluate(
+                state: currentState,
+                action: action,
+                correlationID: action.correlationID
+            )
+
+            let decision = trace.composedDecision
+            if decision == .deny || decision == .escalate {
+                // Governance denied — reducer never runs, state unchanged
+                log.append(.governanceDenied(
+                    id: uuid.next(),
+                    timestamp: clock.now(),
+                    action: action,
+                    agentID: agentID,
+                    stateHash: hashBefore,
+                    trace: trace,
+                    previousEntryHash: ""
+                ))
+
+                continuation.yield(currentState)
+                return .rejected(currentState, rationale: "Governance denied")
+            }
+
+            // Governance allowed — proceed to reducer with trace
+            let result = reducer.reduce(state: currentState, action: action)
+            currentState = result.newState
+            let hashAfter = currentState.stateHash()
+
+            if result.applied {
+                log.append(.acceptedWithGovernance(
+                    id: uuid.next(),
+                    timestamp: clock.now(),
+                    action: action,
+                    agentID: agentID,
+                    stateHashBefore: hashBefore,
+                    stateHashAfter: hashAfter,
+                    rationale: result.rationale,
+                    trace: trace,
+                    previousEntryHash: ""
+                ))
+            } else {
+                // Governance allowed but reducer rejected — record with trace
+                log.append(AuditEvent<A>(
+                    id: uuid.next(),
+                    timestamp: clock.now(),
+                    eventType: .actionProposed(action, agentID: agentID),
+                    stateHashBefore: hashBefore,
+                    stateHashAfter: hashAfter,
+                    applied: false,
+                    rationale: result.rationale,
+                    previousEntryHash: "",
+                    governanceTrace: trace
+                ))
+            }
+
+            continuation.yield(currentState)
+            return result
+        }
+
+        // No governance policy — original behavior
+        let result = reducer.reduce(state: currentState, action: action)
         currentState = result.newState
         let hashAfter = currentState.stateHash()
 
