@@ -36,6 +36,13 @@ struct ContentView: View {
                             Text(event)
                                 .font(.subheadline)
                                 .padding(.horizontal)
+                                .padding(.vertical, event.hasPrefix("🛡️") ? 4 : 0)
+                                .background(
+                                    event.hasPrefix("🛡️")
+                                        ? Color.orange.opacity(0.12)
+                                        : Color.clear
+                                )
+                                .cornerRadius(4)
                         }
                     }
                 }

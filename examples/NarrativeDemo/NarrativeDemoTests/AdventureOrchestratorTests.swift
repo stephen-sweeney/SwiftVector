@@ -13,7 +13,7 @@ import Testing
 
 // MARK: - Audit Trail Tests
 
-@Suite("Adventure Orchestrator Audit Trail")
+@Suite("Adventure Orchestrator Audit Trail", .serialized)
 struct AdventureOrchestratorTests {
     
     private func makeOrchestrator(
@@ -44,48 +44,57 @@ struct AdventureOrchestratorTests {
     func auditLogRecordsProposedAction() async throws {
         let clock = MockClock(fixed: Date(timeIntervalSince1970: 0))
         let orchestrator = makeOrchestrator(clock: clock)
-        
+
         await orchestrator.advance()
-        
+
         let log = await orchestrator.auditLog()
-        
+
         #expect(log.count == 2, "Should have initialization and one action entry")
-        
+
         let actionEntry = log[1]
-        if case .actionProposed(_, let agentID) = actionEntry.eventType {
+        // Agent may propose an action that governance allows (.actionProposed)
+        // or denies (.governanceDenied), depending on the stochastic agent's choice.
+        switch actionEntry.eventType {
+        case .actionProposed(_, let agentID):
             #expect(agentID.hasPrefix("StoryAgent-"), "Agent ID should identify the agent")
-        } else {
-            Issue.record("Second entry should be an action proposal")
+        case .governanceDenied(_, let agentID):
+            #expect(agentID.hasPrefix("StoryAgent-"), "Agent ID should identify the agent")
+        default:
+            Issue.record("Second entry should be an action proposal or governance denial")
         }
-        
+
         #expect(actionEntry.timestamp == clock.now(), "Timestamp should be deterministic")
         #expect(!actionEntry.rationale.isEmpty, "Should have result description")
     }
     
-    @Test("Audit log distinguishes accepted vs rejected actions")
+    @Test("Audit log distinguishes accepted vs denied actions")
     @MainActor
     func auditLogDistinguishesAcceptedVsRejected() async throws {
         let orchestrator = makeOrchestrator()
-        
+
         // Use replay with known actions to control outcomes
-        // Gold amount 500 exceeds limit (100) and will be rejected
+        // Gold amount 500 exceeds GoldBudgetLaw limit — governance denies
         await orchestrator.replay(.findGold(amount: 50))   // Should be accepted
-        await orchestrator.replay(.findGold(amount: 500))  // Should be rejected
-        
+        await orchestrator.replay(.findGold(amount: 500))  // Should be governance denied
+
         let log = await orchestrator.auditLog()
-        
-        // Filter to just the replay actions
-        let replayEntries = log.filter { 
-            if case .actionProposed(_, let agentID) = $0.eventType {
+
+        // Filter to all replay entries: accepted (.actionProposed) and denied (.governanceDenied)
+        let replayEntries = log.filter {
+            switch $0.eventType {
+            case .actionProposed(_, let agentID):
                 return agentID == "REPLAY"
+            case .governanceDenied(_, let agentID):
+                return agentID == "REPLAY"
+            default:
+                return false
             }
-            return false
         }
-        
+
         #expect(replayEntries.count == 2, "Should have two replay entries")
         #expect(replayEntries[0].applied == true, "First action (50 gold) should be accepted")
-        #expect(replayEntries[1].applied == false, "Second action (500 gold) should be rejected")
-        #expect(!replayEntries[1].rationale.isEmpty, "Rejection should be described")
+        #expect(replayEntries[1].applied == false, "Second action (500 gold) should be denied")
+        #expect(!replayEntries[1].rationale.isEmpty, "Denial should be described")
     }
     
     @Test("Audit log captures state hash for replay")

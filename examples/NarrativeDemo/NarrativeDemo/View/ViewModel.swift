@@ -12,7 +12,9 @@ final class ViewModel: ObservableObject {
     @Published var state = AdventureState()
     @Published var narrativeLog: [String] = ["🌲 You awaken in an ancient forest, birds singing overhead."]
     
-    private let orchestrator = AdventureOrchestrator()
+    private let orchestrator = AdventureOrchestrator(
+        governancePolicy: StoryLaws.defaultPolicy()
+    )
     private var task: Task<Void, Never>?
     
     init() {
