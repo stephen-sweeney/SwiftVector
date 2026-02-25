@@ -57,6 +57,17 @@ public enum AuditEventType<A: Action>: Sendable, Equatable {
     /// This breaks the normal action chain but maintains audit continuity.
     case stateRestored(source: String)
     
+    /// An action was denied by the governance layer before reaching the reducer.
+    ///
+    /// - Parameters:
+    ///   - action: The proposed action that governance denied
+    ///   - agentID: Identifier of the agent that proposed the action
+    ///
+    /// Unlike `.actionProposed` with `applied == false` (a reducer rejection),
+    /// `.governanceDenied` means the reducer never ran. The `CompositionTrace`
+    /// attached to the `AuditEvent` records which Laws denied and why.
+    case governanceDenied(A, agentID: String)
+
     /// Custom system-level event.
     ///
     /// - Parameter description: Human-readable description of the event
@@ -78,6 +89,8 @@ extension AuditEventType: CustomStringConvertible {
             return "actionProposed(\(action.actionDescription), agent: \(agentID))"
         case .stateRestored(let source):
             return "stateRestored(from: \(source))"
+        case .governanceDenied(let action, let agentID):
+            return "governanceDenied(\(action.actionDescription), agent: \(agentID))"
         case .systemEvent(let description):
             return "systemEvent(\(description))"
         }
@@ -100,6 +113,7 @@ extension AuditEventType: Codable where A: Codable {
         case initialization
         case actionProposed
         case stateRestored
+        case governanceDenied
         case systemEvent
     }
     
@@ -118,7 +132,12 @@ extension AuditEventType: Codable where A: Codable {
         case .stateRestored(let source):
             try container.encode(EventTypeName.stateRestored, forKey: .type)
             try container.encode(source, forKey: .source)
-            
+
+        case .governanceDenied(let action, let agentID):
+            try container.encode(EventTypeName.governanceDenied, forKey: .type)
+            try container.encode(action, forKey: .action)
+            try container.encode(agentID, forKey: .agentID)
+
         case .systemEvent(let description):
             try container.encode(EventTypeName.systemEvent, forKey: .type)
             try container.encode(description, forKey: .description)
@@ -141,7 +160,12 @@ extension AuditEventType: Codable where A: Codable {
         case .stateRestored:
             let source = try container.decode(String.self, forKey: .source)
             self = .stateRestored(source: source)
-            
+
+        case .governanceDenied:
+            let action = try container.decode(A.self, forKey: .action)
+            let agentID = try container.decode(String.self, forKey: .agentID)
+            self = .governanceDenied(action, agentID: agentID)
+
         case .systemEvent:
             let description = try container.decode(String.self, forKey: .description)
             self = .systemEvent(description: description)

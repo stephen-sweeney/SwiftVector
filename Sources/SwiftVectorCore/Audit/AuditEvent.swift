@@ -103,6 +103,17 @@ public struct AuditEvent<A: Action>: Sendable, Identifiable {
     /// Empty string for the first entry. Forms the cryptographic link
     /// that makes the audit trail tamper-evident.
     public let previousEntryHash: String
+
+    /// Optional governance composition trace for this event.
+    ///
+    /// When present, records the full governance evaluation that preceded
+    /// this event. For `.governanceDenied` events, this explains which Laws
+    /// denied and why. For `.actionProposed` events with governance enabled,
+    /// this records that governance allowed before the reducer ran.
+    ///
+    /// `nil` when governance is not active or for non-action events.
+    /// The nil default ensures backward compatibility with existing code.
+    public let governanceTrace: CompositionTrace?
     
     /// This entry's hash, computed from all content plus the previous entry hash.
     ///
@@ -123,6 +134,7 @@ public struct AuditEvent<A: Action>: Sendable, Identifiable {
     ///   - applied: Whether the action was applied
     ///   - rationale: Human-readable explanation
     ///   - previousEntryHash: Hash of the previous entry (empty for first entry)
+    ///   - governanceTrace: Optional governance composition trace (nil default)
     public init(
         id: UUID,
         timestamp: Date,
@@ -131,7 +143,8 @@ public struct AuditEvent<A: Action>: Sendable, Identifiable {
         stateHashAfter: String,
         applied: Bool,
         rationale: String,
-        previousEntryHash: String = ""
+        previousEntryHash: String = "",
+        governanceTrace: CompositionTrace? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -141,6 +154,7 @@ public struct AuditEvent<A: Action>: Sendable, Identifiable {
         self.applied = applied
         self.rationale = rationale
         self.previousEntryHash = previousEntryHash
+        self.governanceTrace = governanceTrace
     }
 
     private struct HashableContent: Encodable {
@@ -152,6 +166,7 @@ public struct AuditEvent<A: Action>: Sendable, Identifiable {
         let applied: Bool
         let rationale: String
         let previousEntryHash: String
+        let governanceTrace: CompositionTrace?
     }
 
     // MARK: - Hash Computation
@@ -172,7 +187,8 @@ public struct AuditEvent<A: Action>: Sendable, Identifiable {
             stateHashAfter: stateHashAfter,
             applied: applied,
             rationale: rationale,
-            previousEntryHash: previousEntryHash
+            previousEntryHash: previousEntryHash,
+            governanceTrace: governanceTrace
         )
 
         guard let data = try? encoder.encode(content) else {
@@ -196,7 +212,8 @@ extension AuditEvent: Equatable {
         lhs.stateHashAfter == rhs.stateHashAfter &&
         lhs.applied == rhs.applied &&
         lhs.rationale == rhs.rationale &&
-        lhs.previousEntryHash == rhs.previousEntryHash
+        lhs.previousEntryHash == rhs.previousEntryHash &&
+        lhs.governanceTrace == rhs.governanceTrace
     }
 }
 
@@ -213,6 +230,7 @@ extension AuditEvent: Codable where A: Codable {
         case applied
         case rationale
         case previousEntryHash
+        case governanceTrace
     }
 }
 
@@ -367,6 +385,80 @@ extension AuditEvent {
             applied: true,
             rationale: "State restored from \(source)",
             previousEntryHash: previousEntryHash
+        )
+    }
+
+    /// Creates an event for an action denied by governance before reaching the reducer.
+    ///
+    /// - Parameters:
+    ///   - id: Unique identifier
+    ///   - timestamp: When the action was processed
+    ///   - action: The action that governance denied
+    ///   - agentID: Identifier of the proposing agent
+    ///   - stateHash: Hash of the unchanged state (governance denial doesn't change state)
+    ///   - trace: The composition trace recording all Law verdicts
+    ///   - previousEntryHash: Hash of previous entry in the chain
+    /// - Returns: An audit event recording the governance denial
+    public static func governanceDenied(
+        id: UUID,
+        timestamp: Date,
+        action: A,
+        agentID: String,
+        stateHash: String,
+        trace: CompositionTrace,
+        previousEntryHash: String
+    ) -> AuditEvent {
+        AuditEvent(
+            id: id,
+            timestamp: timestamp,
+            eventType: .governanceDenied(action, agentID: agentID),
+            stateHashBefore: stateHash,
+            stateHashAfter: stateHash,  // Unchanged — governance denied before reducer
+            applied: false,
+            rationale: "Governance denied",
+            previousEntryHash: previousEntryHash,
+            governanceTrace: trace
+        )
+    }
+
+    /// Creates an event for an accepted action that passed governance evaluation.
+    ///
+    /// Use this when governance is active and allowed the action, and the reducer
+    /// subsequently accepted it. The trace records which Laws evaluated and what
+    /// they decided, providing full audit visibility.
+    ///
+    /// - Parameters:
+    ///   - id: Unique identifier
+    ///   - timestamp: When the action was processed
+    ///   - action: The action that was proposed
+    ///   - agentID: Identifier of the proposing agent
+    ///   - stateHashBefore: Hash before the action
+    ///   - stateHashAfter: Hash after the action
+    ///   - rationale: Description of what changed
+    ///   - trace: The composition trace recording governance approval
+    ///   - previousEntryHash: Hash of previous entry in the chain
+    /// - Returns: An audit event recording the governance-approved accepted action
+    public static func acceptedWithGovernance(
+        id: UUID,
+        timestamp: Date,
+        action: A,
+        agentID: String,
+        stateHashBefore: String,
+        stateHashAfter: String,
+        rationale: String,
+        trace: CompositionTrace,
+        previousEntryHash: String
+    ) -> AuditEvent {
+        AuditEvent(
+            id: id,
+            timestamp: timestamp,
+            eventType: .actionProposed(action, agentID: agentID),
+            stateHashBefore: stateHashBefore,
+            stateHashAfter: stateHashAfter,
+            applied: true,
+            rationale: rationale,
+            previousEntryHash: previousEntryHash,
+            governanceTrace: trace
         )
     }
 }

@@ -200,7 +200,8 @@ extension EventLog {
             stateHashAfter: event.stateHashAfter,
             applied: event.applied,
             rationale: event.rationale,
-            previousEntryHash: lastEntryHash
+            previousEntryHash: lastEntryHash,
+            governanceTrace: event.governanceTrace
         )
         entries.append(linkedEvent)
     }
@@ -366,13 +367,30 @@ extension EventLog {
                     )
                 }
                 
+            case .governanceDenied(_, _):
+                // Governance denied — state must be unchanged
+                if entry.stateHashBefore != entry.stateHashAfter {
+                    return .invalid(
+                        atIndex: index,
+                        reason: "Governance denied event has mismatched hashes: before='\(entry.stateHashBefore)' after='\(entry.stateHashAfter)'"
+                    )
+                }
+
+                // Verify recorded hash matches computed state
+                if entry.stateHashBefore != computedHashBefore {
+                    return .invalid(
+                        atIndex: index,
+                        reason: "Governance denied hash mismatch: computed '\(computedHashBefore)' but log has '\(entry.stateHashBefore)'"
+                    )
+                }
+
             case .stateRestored(let source):
                 // Cannot replay state restoration without the snapshot
                 return .invalid(
                     atIndex: index,
                     reason: "Cannot verify replay across stateRestored event (source: \(source)) without snapshot"
                 )
-                
+
             case .systemEvent(let description):
                 // System events should not change state
                 if entry.stateHashBefore != entry.stateHashAfter {
@@ -438,6 +456,23 @@ extension EventLog {
                 return nil
             }
             return (action, agentID, entry.rationale)
+        }
+    }
+
+    /// Returns only actions denied by governance (before reaching the reducer).
+    ///
+    /// Unlike `rejectedActions()` (which returns reducer rejections),
+    /// this returns actions that were blocked by the governance layer.
+    /// Each result includes the full `CompositionTrace` with all Law verdicts.
+    ///
+    /// - Returns: Array of (action, agentID, trace) tuples for governance-denied actions
+    public func governanceDeniedActions() -> [(action: A, agentID: String, trace: CompositionTrace)] {
+        entries.compactMap { entry in
+            guard case .governanceDenied(let action, let agentID) = entry.eventType,
+                  let trace = entry.governanceTrace else {
+                return nil
+            }
+            return (action, agentID, trace)
         }
     }
     
